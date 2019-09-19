@@ -65,7 +65,6 @@ envoy_cc_library(
         "@envoy//source/common/common:assert_lib",
         "@envoy//source/common/common:empty_string",
         "@envoy//source/common/config:datasource_lib",
-        "@envoy//source/common/config:tls_context_json_lib",
         "@envoy//source/common/json:json_loader_lib",
         "@envoy//source/common/protobuf:utility_lib",
         "@envoy//source/common/secret:sds_api_lib",
