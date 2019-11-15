@@ -232,10 +232,6 @@ PostIoAction SslSocket::doHandshake() {
   int rc = SSL_do_handshake(ssl_);
   if (rc == 1) {
     ENVOY_CONN_LOG(debug, "handshake complete", callbacks_->connection());
-    if (state_ == SocketState::HandshakeInProgress) {
-      // No need to disable if no async engine in use.
-      file_event_->setEnabled(0);
-    }
     state_ = SocketState::HandshakeComplete;
     ctx_->logHandshake(ssl_);
     callbacks_->raiseEvent(Network::ConnectionEvent::Connected);
@@ -409,12 +405,10 @@ void SslSocket::asyncCb() {
 
   // We lose the return value here, so might consider propagating it with an event
   // in case we run into "Close" result from the handshake handler.
-  if (state_ != SocketState::HandshakeComplete) {
-    PostIoAction action = doHandshake();
-    if (action == PostIoAction::Close) {
-      ENVOY_CONN_LOG(debug, "async handshake completion error", callbacks_->connection());
-      callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
-    }
+  PostIoAction action = doHandshake();
+  if (action == PostIoAction::Close) {
+    ENVOY_CONN_LOG(debug, "async handshake completion error", callbacks_->connection());
+    callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
   }
 }
 
