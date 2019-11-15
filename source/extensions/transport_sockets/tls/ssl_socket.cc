@@ -62,11 +62,57 @@ SslSocket::SslSocket(Envoy::Ssl::ContextSharedPtr ctx, InitialState state,
   SSL_set_mode(ssl_, SSL_MODE_ASYNC);
 }
 
+struct THandle {
+  Ssl::ConnectionInfoConstSharedPtr info_;
+  Event::FileEventPtr file_event_;
+  Event::FileEventPtr old_file_event_;
+};
+
 SslSocket::~SslSocket() {
+  SSL_clear_mode(ssl_, SSL_MODE_ASYNC);
   // If we let the SSL socket be destroyed while there is a pending async SSL operation,
   // it seems that the callback handler will use already freed memory.
-  while (SSL_waiting_for_async(ssl_))
-    ;
+  if (SSL_waiting_for_async(ssl_)) {
+    OSSL_ASYNC_FD* fds;
+    size_t numfds;
+
+    THandle *th_ptr = new THandle;
+    th_ptr->info_ = info_;
+
+    int rc = SSL_get_all_async_fds(ssl_, NULL, &numfds);
+    if (rc == 0) {
+      printf("Oops1\n");
+      return;
+    }
+
+    if (numfds != 1) {
+      printf("Oops2\n");
+      return;
+    }
+
+    fds = static_cast<OSSL_ASYNC_FD*>(malloc(numfds * sizeof(OSSL_ASYNC_FD)));
+    if (fds == NULL) {
+      printf("Oops3\n");
+      return;
+    }
+
+    rc = SSL_get_all_async_fds(ssl_, fds, &numfds);
+    if (rc == 0) {
+      printf("Oops4\n");
+      free(fds);
+      return;
+    }
+
+    th_ptr->old_file_event_ = std::move(file_event_);
+    th_ptr->file_event_ = callbacks_->connection().dispatcher().createFileEvent(
+        fds[0], [th_ptr](uint32_t /* events */) -> void {
+          printf("Delete THandle\n");
+          delete th_ptr;
+        },
+        Event::FileTriggerType::Edge, Event::FileReadyType::Read);
+    free(fds);
+    printf("Postponed deleting SSL\n");
+  }
 }
 
 void SslSocket::setTransportSocketCallbacks(Network::TransportSocketCallbacks& callbacks) {

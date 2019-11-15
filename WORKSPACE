@@ -2,16 +2,8 @@ workspace(name = "envoy_openssl")
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-http_archive(
-      name = "openssl",
-      urls = ["https://github.com/openssl/openssl/archive/OpenSSL_1_1_1b.tar.gz"],
-      sha256 = "d6418b0e1e39ef058b630e248bbb3b04241d6fad57bdb86db0b338c2374bda80",
-      build_file = "@//:openssl.BUILD",
-      strip_prefix = "openssl-OpenSSL_1_1_1b",
-)
-
 new_local_repository(
-    name = "openssl_shared",
+    name = "openssl",
     path = "/usr/lib/x86_64-linux-gnu",
     build_file = "openssl_host_shared.BUILD"
 )
