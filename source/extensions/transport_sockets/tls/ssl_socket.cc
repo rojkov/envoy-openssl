@@ -248,9 +248,11 @@ PostIoAction SslSocket::doHandshake() {
     case SSL_ERROR_WANT_WRITE:
       ENVOY_CONN_LOG(debug, "handshake expecting {}", callbacks_->connection(),
                      err == SSL_ERROR_WANT_READ ? "read" : "write");
+      printf("want %s\n", err == SSL_ERROR_WANT_READ ? "read" : "write");
       return PostIoAction::KeepOpen;
     case SSL_ERROR_WANT_ASYNC:
       ENVOY_CONN_LOG(debug, "SSL handshake: request async handling", callbacks_->connection());
+      printf("want async\n");
 
       if (state_ == SocketState::HandshakeInProgress) {
         return PostIoAction::KeepOpen;

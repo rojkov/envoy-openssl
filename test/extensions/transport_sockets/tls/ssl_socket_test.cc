@@ -39,6 +39,7 @@
 #include "absl/strings/str_replace.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "openssl/engine.h"
 #include "openssl/ssl.h"
 
 using testing::_;
@@ -4145,21 +4146,183 @@ TEST_P(SslReadBufferLimitTest, SmallReadsIntoSameSlice) {
   dispatcher_->run(Event::Dispatcher::RunType::Block);
 }
 
+static RSA_METHOD *fakeRsaMethod = nullptr;
+static const char *fake_engine_id = "feng";
+static const char *fake_engine_name = "Fake engine";
+
+static void wait_cleanup(ASYNC_WAIT_CTX * /* ctx */, const void */* key */,
+                         OSSL_ASYNC_FD readfd, void *pvwritefd)
+{
+    OSSL_ASYNC_FD *pwritefd = static_cast<OSSL_ASYNC_FD *>(pvwritefd);
+    close(readfd);
+    close(*pwritefd);
+    OPENSSL_free(pwritefd);
+}
+
+static void fake_pause_job() {
+  printf("fake_pause_job()\n");
+    ASYNC_JOB *job;
+    ASYNC_WAIT_CTX *waitctx;
+    OSSL_ASYNC_FD pipefds[2] = {0, 0};
+    OSSL_ASYNC_FD *writefd;
+    char buf = 'X';
+
+    if ((job = ASYNC_get_current_job()) == NULL)
+        return;
+
+    waitctx = ASYNC_get_wait_ctx(job);
+
+    if (ASYNC_WAIT_CTX_get_fd(waitctx, fake_engine_id, &pipefds[0],
+                              (void **)&writefd)) {
+        pipefds[1] = *writefd;
+    } else {
+        writefd = static_cast<OSSL_ASYNC_FD *>(OPENSSL_malloc(sizeof(*writefd)));
+        if (writefd == NULL)
+            return;
+        if (pipe(pipefds) != 0) {
+            OPENSSL_free(writefd);
+            return;
+        }
+        *writefd = pipefds[1];
+
+        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, fake_engine_id, pipefds[0],
+                                        writefd, wait_cleanup)) {
+            wait_cleanup(waitctx, fake_engine_id, pipefds[0], writefd);
+            return;
+        }
+    }
+    /*
+     * In the Dummy async engine we are cheating. We signal that the job
+     * is complete by waking it before the call to ASYNC_pause_job(). A real
+     * async engine would only wake when the job was actually complete
+     */
+    if (write(pipefds[1], &buf, 1) < 0)
+        return;
+
+    /* Ignore errors - we carry on anyway */
+    ASYNC_pause_job();
+
+    /* Clear the wake signal */
+    if (read(pipefds[0], &buf, 1) < 0)
+        return;
+}
+
 /*
+ * RSA implementation
+ */
+
+static int fake_pub_enc(int flen, const unsigned char *from,
+                    unsigned char *to, RSA *rsa, int padding) {
+    /* Ignore errors - we carry on anyway */
+    fake_pause_job();
+  printf("fake_pub_enc()\n");
+    return RSA_meth_get_pub_enc(RSA_PKCS1_OpenSSL())
+        (flen, from, to, rsa, padding);
+}
+
+static int fake_pub_dec(int flen, const unsigned char *from,
+                    unsigned char *to, RSA *rsa, int padding) {
+    /* Ignore errors - we carry on anyway */
+    fake_pause_job();
+  printf("fake_pub_dec()\n");
+    return RSA_meth_get_pub_dec(RSA_PKCS1_OpenSSL())
+        (flen, from, to, rsa, padding);
+}
+
+static int fake_rsa_priv_enc(int flen, const unsigned char *from,
+                      unsigned char *to, RSA *rsa, int padding)
+{
+    /* Ignore errors - we carry on anyway */
+    fake_pause_job();
+  printf("fake_rsa_priv_enc()\n");
+    return RSA_meth_get_priv_enc(RSA_PKCS1_OpenSSL())
+        (flen, from, to, rsa, padding);
+}
+
+static int fake_rsa_priv_dec(int flen, const unsigned char *from,
+                      unsigned char *to, RSA *rsa, int padding)
+{
+    /* Ignore errors - we carry on anyway */
+    fake_pause_job();
+  printf("fake_rsa_priv_dec()\n");
+    return RSA_meth_get_priv_dec(RSA_PKCS1_OpenSSL())
+        (flen, from, to, rsa, padding);
+}
+
+static int fake_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
+{
+    /* Ignore errors - we carry on anyway */
+    fake_pause_job();
+  printf("fake_rsa_mod_exp()\n");
+    return RSA_meth_get_mod_exp(RSA_PKCS1_OpenSSL())(r0, I, rsa, ctx);
+}
+
+static int fake_rsa_init(RSA *rsa)
+{
+  printf("fake_rsa_init()\n");
+    return RSA_meth_get_init(RSA_PKCS1_OpenSSL())(rsa);
+}
+static int fake_rsa_finish(RSA *rsa)
+{
+  printf("fake_rsa_finish()\n");
+    return RSA_meth_get_finish(RSA_PKCS1_OpenSSL())(rsa);
+}
+
+static ENGINE *newFakeAsyncEngine() {
+  ENGINE *e = ENGINE_new();
+  if (e == nullptr) {
+    return nullptr;
+  }
+  printf("NEW ENGINE CREATED\n");
+  fakeRsaMethod = RSA_meth_new("Fake Async RSA method", 0);
+  if (fakeRsaMethod == nullptr) {
+    printf("failed to make fake rsa method\n");
+  }
+  if (RSA_meth_set_pub_enc(fakeRsaMethod, fake_pub_enc) == 0) {
+    printf("failed setting pub enc\n");
+  }
+  if (RSA_meth_set_pub_dec(fakeRsaMethod, fake_pub_dec) == 0) {
+    printf("failed setting pub dec\n");
+  }
+  if (RSA_meth_set_priv_enc(fakeRsaMethod, fake_rsa_priv_enc) == 0) {
+    printf("failed setting rsa priv enc\n");
+  }
+  if (RSA_meth_set_priv_dec(fakeRsaMethod, fake_rsa_priv_dec) == 0) {
+    printf("failed setting rsa priv dec\n");
+  }
+  if (RSA_meth_set_mod_exp(fakeRsaMethod, fake_rsa_mod_exp) == 0) {
+    printf("failed setting rsa mod exp\n");
+  }
+  if (RSA_meth_set_bn_mod_exp(fakeRsaMethod, BN_mod_exp_mont) == 0) {
+    printf("failed setting bn mod exp\n");
+  }
+  if (RSA_meth_set_init(fakeRsaMethod, fake_rsa_init) == 0) {
+    printf("failed setting set init\n");
+  }
+  if (RSA_meth_set_finish(fakeRsaMethod, fake_rsa_finish) == 0) {
+    printf("failed setting set finish\n");
+  }
+  if (!ENGINE_set_id(e, fake_engine_id)) {
+    printf("failed setting engine id\n");
+  }
+  if (!ENGINE_set_name(e, fake_engine_name)) {
+    printf("failed setting engine name\n");
+  }
+  if (!ENGINE_set_RSA(e, fakeRsaMethod)) {
+    printf("failed setting engine name\n");
+  }
+  return e;
+}
+
 // Test asynchronous signing (ECDHE) using a private key provider.
-TEST_P(SslSocketTest, RsaPrivateKeyProviderAsyncSignSuccess) {
+TEST_P(SslSocketTest, SyncSignSuccess) {
   const std::string server_ctx_yaml = R"EOF(
   common_tls_context:
     tls_certificates:
       certificate_chain:
         filename: "{{ test_tmpdir }}/unittestcert.pem"
-      private_key_provider:
-        provider_name: test
-        config:
-          private_key_file: "{{ test_tmpdir }}/unittestkey.pem"
-          expected_operation: sign
-          sync_mode: false
-          mode: rsa
+      private_key:
+        filename: "{{ test_tmpdir }}/unittestkey.pem"
     validation_context:
       trusted_ca:
         filename: "{{ test_rundir }}/test/extensions/transport_sockets/tls/test_data/ca_cert.pem"
@@ -4168,16 +4331,30 @@ TEST_P(SslSocketTest, RsaPrivateKeyProviderAsyncSignSuccess) {
 )EOF";
   const std::string successful_client_ctx_yaml = R"EOF(
   common_tls_context:
-    tls_params:
-      cipher_suites:
-      - ECDHE-RSA-AES128-GCM-SHA256
 )EOF";
-
+  ENGINE *old_engine = ENGINE_get_default_RSA();
+  printf("Old Engine: %p\n", old_engine);
+  ENGINE* engine = newFakeAsyncEngine();
+  printf("Engine: %p\n", engine);
+  int ret = ENGINE_add(engine);
+  printf("Engine added? %d\n", ret);
+  ret = ENGINE_init(engine);
+  printf("Engine initialized? %d\n", ret);
+  ret = ENGINE_set_default_RSA(engine);
+  printf("Engine set to default RSA? %d\n", ret);
   TestUtilOptions successful_test_options(successful_client_ctx_yaml, server_ctx_yaml, true,
                                           GetParam());
-  testUtil(successful_test_options.setPrivateKeyMethodExpected(true));
+  testUtil(successful_test_options);
+  ret = ENGINE_finish(engine);
+  printf("Engine fnished? %d\n", ret);
+  ret = ENGINE_remove(engine);
+  printf("Engine removed? %d\n", ret);
+  ENGINE_free(engine);
+  //ret = ENGINE_set_default_RSA(old_engine);
+  //printf("Engine set to old default RSA? %d\n", ret);
 }
 
+/*
 // Test asynchronous decryption (RSA).
 TEST_P(SslSocketTest, RsaPrivateKeyProviderAsyncDecryptSuccess) {
   const std::string server_ctx_yaml = R"EOF(
