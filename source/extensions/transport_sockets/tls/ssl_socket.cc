@@ -403,6 +403,7 @@ void SslSocket::shutdownSsl() {
 void SslSocket::asyncCb() {
   ENVOY_CONN_LOG(debug, "SSL async done!", callbacks_->connection());
 
+  ASSERT(state_ != SocketState::HandshakeComplete);
   // We lose the return value here, so might consider propagating it with an event
   // in case we run into "Close" result from the handshake handler.
   PostIoAction action = doHandshake();
