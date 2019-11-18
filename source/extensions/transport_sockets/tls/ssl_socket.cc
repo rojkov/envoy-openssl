@@ -69,7 +69,6 @@ struct THandle {
 };
 
 SslSocket::~SslSocket() {
-  SSL_clear_mode(ssl_, SSL_MODE_ASYNC);
   // If we let the SSL socket be destroyed while there is a pending async SSL operation,
   // it seems that the callback handler will use already freed memory.
   if (SSL_waiting_for_async(ssl_)) {
