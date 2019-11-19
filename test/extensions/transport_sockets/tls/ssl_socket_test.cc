@@ -58,6 +58,8 @@ namespace TransportSockets {
 namespace Tls {
 namespace {
 
+Envoy::Network::ClientConnection *client_con_ptr = nullptr;
+
 /**
  * A base class to hold the options for testUtil() and testUtilV2().
  */
@@ -286,6 +288,7 @@ void testUtil(const TestUtilOptions& options) {
   Network::ClientConnectionPtr client_connection = dispatcher->createClientConnection(
       socket.localAddress(), Network::Address::InstanceConstSharedPtr(),
       client_ssl_socket_factory.createTransportSocket(nullptr), nullptr);
+      client_con_ptr = client_connection.get();
   Network::ConnectionPtr server_connection;
   Network::MockConnectionCallbacks server_connection_callbacks;
   EXPECT_CALL(callbacks, onAccept_(_))
@@ -393,7 +396,7 @@ void testUtil(const TestUtilOptions& options) {
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
   } else if (options.expectPrematureExit()) {
     printf("client connection %ld\n", client_connection->id());
-    EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::RemoteClose))
+    EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
@@ -4248,8 +4251,15 @@ static int fake_rsa_priv_enc(int flen, const unsigned char *from,
                       unsigned char *to, RSA *rsa, int padding)
 {
     /* Ignore errors - we carry on anyway */
-  printf("fake_rsa_priv_enc()\n");
+  static int counter = 0;
+  counter++;
+  printf("fake_rsa_priv_enc() %d\n", counter);
     fake_pause_job();
+  if (counter == 3) {
+    printf("fake_rsa_priv_enc() %d BOOM\n", counter);
+    // TODO: close client connection here
+    client_con_ptr->close(Network::ConnectionCloseType::NoFlush);
+  }
     return RSA_meth_get_priv_enc(RSA_PKCS1_OpenSSL())
         (flen, from, to, rsa, padding);
 }
@@ -4371,6 +4381,41 @@ TEST_P(SslSocketTest, AsyncRSASuccess) {
 }
 
 TEST_P(SslSocketTest, SyncSignSuccess2) {
+  const std::string server_ctx_yaml = R"EOF(
+  common_tls_context:
+    tls_certificates:
+      certificate_chain:
+        filename: "{{ test_tmpdir }}/unittestcert.pem"
+      private_key:
+        filename: "{{ test_tmpdir }}/unittestkey.pem"
+    validation_context:
+      trusted_ca:
+        filename: "{{ test_rundir }}/test/extensions/transport_sockets/tls/test_data/ca_cert.pem"
+      crl:
+        filename: "{{ test_rundir }}/test/extensions/transport_sockets/tls/test_data/ca_cert.crl"
+)EOF";
+  const std::string successful_client_ctx_yaml = R"EOF(
+  common_tls_context:
+)EOF";
+  ENGINE* engine = newFakeAsyncEngine();
+  printf("Engine: %p\n", engine);
+  int ret = ENGINE_init(engine);
+  printf("Engine initialized? %d\n", ret);
+  ret = ENGINE_set_default_RSA(engine);
+  printf("Engine set to default RSA? %d\n", ret);
+  TestUtilOptions successful_test_options(successful_client_ctx_yaml, server_ctx_yaml, false,
+                                          GetParam());
+  testUtil(successful_test_options
+    .setExpectedServerCloseEvent(Network::ConnectionEvent::LocalClose)
+    .setExpectedServerStats(""));
+  ENGINE_unregister_RSA(engine);
+  ret = ENGINE_finish(engine);
+  printf("Engine fnished? %d\n", ret);
+  ret = ENGINE_free(engine);
+  printf("Engine freed? %d\n", ret);
+}
+
+TEST_P(SslSocketTest, SyncSignSuccess3) {
   const std::string server_ctx_yaml = R"EOF(
   common_tls_context:
     tls_certificates:
