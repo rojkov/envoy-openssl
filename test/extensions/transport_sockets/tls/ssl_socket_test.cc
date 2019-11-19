@@ -4332,8 +4332,8 @@ static void display_engine_list(void)
     ENGINE_free(h);
 }
 
-// Test asynchronous signing (ECDHE) using a private key provider.
-TEST_P(SslSocketTest, SyncSignSuccess) {
+// Test signing with an asynchronous engine.
+TEST_P(SslSocketTest, AsyncRSASuccess) {
   const std::string server_ctx_yaml = R"EOF(
   common_tls_context:
     tls_certificates:
@@ -4360,6 +4360,40 @@ display_engine_list();
   TestUtilOptions successful_test_options(successful_client_ctx_yaml, server_ctx_yaml, true,
                                           GetParam());
   testUtil(successful_test_options);
+  ENGINE_unregister_RSA(engine);
+  ret = ENGINE_finish(engine);
+  printf("Engine fnished? %d\n", ret);
+  ret = ENGINE_free(engine);
+  printf("Engine freed? %d\n", ret);
+}
+
+TEST_P(SslSocketTest, SyncSignSuccess2) {
+  const std::string server_ctx_yaml = R"EOF(
+  common_tls_context:
+    tls_certificates:
+      certificate_chain:
+        filename: "{{ test_tmpdir }}/unittestcert.pem"
+      private_key:
+        filename: "{{ test_tmpdir }}/unittestkey.pem"
+    validation_context:
+      trusted_ca:
+        filename: "{{ test_rundir }}/test/extensions/transport_sockets/tls/test_data/ca_cert.pem"
+      crl:
+        filename: "{{ test_rundir }}/test/extensions/transport_sockets/tls/test_data/ca_cert.crl"
+)EOF";
+  const std::string successful_client_ctx_yaml = R"EOF(
+  common_tls_context:
+)EOF";
+display_engine_list();
+  ENGINE* engine = newFakeAsyncEngine();
+  printf("Engine: %p\n", engine);
+  int ret = ENGINE_init(engine);
+  printf("Engine initialized? %d\n", ret);
+  ret = ENGINE_set_default_RSA(engine);
+  printf("Engine set to default RSA? %d\n", ret);
+  TestUtilOptions successful_test_options(successful_client_ctx_yaml, server_ctx_yaml, true,
+                                          GetParam());
+  testUtil(successful_test_options.setExpectedServerCloseEvent(Network::ConnectionEvent::LocalClose));
   ENGINE_unregister_RSA(engine);
   ret = ENGINE_finish(engine);
   printf("Engine fnished? %d\n", ret);

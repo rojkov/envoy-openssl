@@ -248,7 +248,6 @@ PostIoAction SslSocket::doHandshake() {
     case SSL_ERROR_WANT_WRITE:
       ENVOY_CONN_LOG(debug, "handshake expecting {}", callbacks_->connection(),
                      err == SSL_ERROR_WANT_READ ? "read" : "write");
-      printf("want %s\n", err == SSL_ERROR_WANT_READ ? "read" : "write");
       return PostIoAction::KeepOpen;
     case SSL_ERROR_WANT_ASYNC:
       ENVOY_CONN_LOG(debug, "SSL handshake: request async handling", callbacks_->connection());
@@ -403,6 +402,7 @@ void SslSocket::shutdownSsl() {
 
 void SslSocket::asyncCb() {
   ENVOY_CONN_LOG(debug, "SSL async done!", callbacks_->connection());
+  printf("SslSocket::asyncCb()\n");
 
   ASSERT(state_ != SocketState::HandshakeComplete);
   // We lose the return value here, so might consider propagating it with an event
