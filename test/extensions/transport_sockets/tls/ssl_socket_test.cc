@@ -4314,24 +4314,6 @@ static ENGINE *newFakeAsyncEngine() {
   return e;
 }
 
-static void display_engine_list(void)
-{
-    ENGINE *h;
-    int loop;
-
-    loop = 0;
-    for (h = ENGINE_get_first(); h != NULL; h = ENGINE_get_next(h)) {
-        printf("#%d: id = \"%s\", name = \"%s\"\n",
-               loop++, ENGINE_get_id(h), ENGINE_get_name(h));
-    }
-
-    /*
-     * ENGINE_get_first() increases the struct_ref counter, so we must call
-     * ENGINE_free() to decrease it again
-     */
-    ENGINE_free(h);
-}
-
 // Test signing with an asynchronous engine.
 TEST_P(SslSocketTest, AsyncRSASuccess) {
   const std::string server_ctx_yaml = R"EOF(
@@ -4350,7 +4332,6 @@ TEST_P(SslSocketTest, AsyncRSASuccess) {
   const std::string successful_client_ctx_yaml = R"EOF(
   common_tls_context:
 )EOF";
-display_engine_list();
   ENGINE* engine = newFakeAsyncEngine();
   printf("Engine: %p\n", engine);
   int ret = ENGINE_init(engine);
@@ -4384,7 +4365,6 @@ TEST_P(SslSocketTest, SyncSignSuccess2) {
   const std::string successful_client_ctx_yaml = R"EOF(
   common_tls_context:
 )EOF";
-display_engine_list();
   ENGINE* engine = newFakeAsyncEngine();
   printf("Engine: %p\n", engine);
   int ret = ENGINE_init(engine);
@@ -4393,7 +4373,7 @@ display_engine_list();
   printf("Engine set to default RSA? %d\n", ret);
   TestUtilOptions successful_test_options(successful_client_ctx_yaml, server_ctx_yaml, true,
                                           GetParam());
-  testUtil(successful_test_options.setExpectedServerCloseEvent(Network::ConnectionEvent::LocalClose));
+  testUtil(successful_test_options.setExpectedServerCloseEvent(Network::ConnectionEvent::RemoteClose));
   ENGINE_unregister_RSA(engine);
   ret = ENGINE_finish(engine);
   printf("Engine fnished? %d\n", ret);

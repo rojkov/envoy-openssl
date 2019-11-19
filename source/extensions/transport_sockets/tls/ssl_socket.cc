@@ -409,6 +409,7 @@ void SslSocket::asyncCb() {
   // in case we run into "Close" result from the handshake handler.
   PostIoAction action = doHandshake();
   if (action == PostIoAction::Close) {
+    printf("SslSocket::asyncCb()  action = Close\n");
     ENVOY_CONN_LOG(debug, "async handshake completion error", callbacks_->connection());
     callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
   }
