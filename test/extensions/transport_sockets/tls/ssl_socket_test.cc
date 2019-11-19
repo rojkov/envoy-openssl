@@ -397,9 +397,14 @@ void testUtil(const TestUtilOptions& options) {
   } else if (options.expectPrematureExit()) {
     printf("client connection %ld\n", client_connection->id());
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
-        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
+        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { 
+          close_second_time(); 
+          auto serv_con_ptr = server_connection.release();
+          serv_con_ptr->close(Network::ConnectionCloseType::NoFlush);
+          delete serv_con_ptr;
+    }));
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
-        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
+        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { /* close_second_time(); */}));
   } else {
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::RemoteClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
