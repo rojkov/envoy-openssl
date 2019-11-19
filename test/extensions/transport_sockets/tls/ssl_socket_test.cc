@@ -99,7 +99,7 @@ public:
                   bool expect_success, Network::Address::IpVersion version)
       : TestUtilOptionsBase(expect_success, version), client_ctx_yaml_(client_ctx_yaml),
         server_ctx_yaml_(server_ctx_yaml), expect_no_cert_(false), expect_no_cert_chain_(false),
-        expect_private_key_method_(false),
+        expect_private_key_method_(false), expect_premature_exit_(false),
         expected_server_close_event_(Network::ConnectionEvent::RemoteClose) {
     if (expect_success) {
       setExpectedServerStats("ssl.handshake");
@@ -127,6 +127,13 @@ public:
 
   TestUtilOptions& setExpectNoCertChain() {
     expect_no_cert_chain_ = true;
+    return *this;
+  }
+
+  bool expectPrematureExit() const { return expect_premature_exit_; }
+
+  TestUtilOptions& setExpectPrematureExit() {
+    expect_premature_exit_ = true;
     return *this;
   }
 
@@ -223,6 +230,7 @@ private:
   bool expect_no_cert_;
   bool expect_no_cert_chain_;
   bool expect_private_key_method_;
+  bool expect_premature_exit_;
   Network::ConnectionEvent expected_server_close_event_;
   std::string expected_digest_;
   std::vector<std::string> expected_local_uri_;
@@ -369,7 +377,8 @@ void testUtil(const TestUtilOptions& options) {
   };
 
   size_t close_count = 0;
-  auto close_second_time = [&close_count, &dispatcher]() {
+  auto close_second_time = [&close_count, &dispatcher, &options]() {
+    printf("dispatcher exit %d\n", options.expectPrematureExit());
     if (++close_count == 2) {
       dispatcher->exit();
     }
@@ -382,6 +391,16 @@ void testUtil(const TestUtilOptions& options) {
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { connect_second_time(); }));
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
+  } else if (options.expectPrematureExit()) {
+    EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::Connected))
+        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void {
+          client_connection->close(Network::ConnectionCloseType::NoFlush);
+        }));
+    EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
+        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
+    EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::Connected));
+    EXPECT_CALL(server_connection_callbacks, onEvent(options.expectedServerCloseEvent()))
+        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
   } else {
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::RemoteClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
@@ -4214,8 +4233,8 @@ static void fake_pause_job() {
 static int fake_pub_enc(int flen, const unsigned char *from,
                     unsigned char *to, RSA *rsa, int padding) {
     /* Ignore errors - we carry on anyway */
-    fake_pause_job();
   printf("fake_pub_enc()\n");
+    fake_pause_job();
     return RSA_meth_get_pub_enc(RSA_PKCS1_OpenSSL())
         (flen, from, to, rsa, padding);
 }
@@ -4223,8 +4242,8 @@ static int fake_pub_enc(int flen, const unsigned char *from,
 static int fake_pub_dec(int flen, const unsigned char *from,
                     unsigned char *to, RSA *rsa, int padding) {
     /* Ignore errors - we carry on anyway */
-    fake_pause_job();
   printf("fake_pub_dec()\n");
+    fake_pause_job();
     return RSA_meth_get_pub_dec(RSA_PKCS1_OpenSSL())
         (flen, from, to, rsa, padding);
 }
@@ -4233,8 +4252,8 @@ static int fake_rsa_priv_enc(int flen, const unsigned char *from,
                       unsigned char *to, RSA *rsa, int padding)
 {
     /* Ignore errors - we carry on anyway */
-    fake_pause_job();
   printf("fake_rsa_priv_enc()\n");
+    fake_pause_job();
     return RSA_meth_get_priv_enc(RSA_PKCS1_OpenSSL())
         (flen, from, to, rsa, padding);
 }
@@ -4243,8 +4262,8 @@ static int fake_rsa_priv_dec(int flen, const unsigned char *from,
                       unsigned char *to, RSA *rsa, int padding)
 {
     /* Ignore errors - we carry on anyway */
-    fake_pause_job();
   printf("fake_rsa_priv_dec()\n");
+    fake_pause_job();
     return RSA_meth_get_priv_dec(RSA_PKCS1_OpenSSL())
         (flen, from, to, rsa, padding);
 }
@@ -4252,8 +4271,8 @@ static int fake_rsa_priv_dec(int flen, const unsigned char *from,
 static int fake_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
 {
     /* Ignore errors - we carry on anyway */
-    fake_pause_job();
   printf("fake_rsa_mod_exp()\n");
+    fake_pause_job();
     return RSA_meth_get_mod_exp(RSA_PKCS1_OpenSSL())(r0, I, rsa, ctx);
 }
 
@@ -4371,9 +4390,12 @@ TEST_P(SslSocketTest, SyncSignSuccess2) {
   printf("Engine initialized? %d\n", ret);
   ret = ENGINE_set_default_RSA(engine);
   printf("Engine set to default RSA? %d\n", ret);
-  TestUtilOptions successful_test_options(successful_client_ctx_yaml, server_ctx_yaml, true,
+  TestUtilOptions successful_test_options(successful_client_ctx_yaml, server_ctx_yaml, false,
                                           GetParam());
-  testUtil(successful_test_options.setExpectedServerCloseEvent(Network::ConnectionEvent::RemoteClose));
+  testUtil(successful_test_options
+    .setExpectedServerCloseEvent(Network::ConnectionEvent::RemoteClose)
+    .setExpectPrematureExit()
+    .setExpectedServerStats(""));
   ENGINE_unregister_RSA(engine);
   ret = ENGINE_finish(engine);
   printf("Engine fnished? %d\n", ret);
