@@ -392,14 +392,10 @@ void testUtil(const TestUtilOptions& options) {
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
   } else if (options.expectPrematureExit()) {
-    EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::Connected))
-        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void {
-          client_connection->close(Network::ConnectionCloseType::NoFlush);
-        }));
-    EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
+    printf("client connection %ld\n", client_connection->id());
+    EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::RemoteClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
-    EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::Connected));
-    EXPECT_CALL(server_connection_callbacks, onEvent(options.expectedServerCloseEvent()))
+    EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
   } else {
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::RemoteClose))
@@ -4271,8 +4267,15 @@ static int fake_rsa_priv_dec(int flen, const unsigned char *from,
 static int fake_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
 {
     /* Ignore errors - we carry on anyway */
-  printf("fake_rsa_mod_exp()\n");
+  static int counter = 0;
+  counter++;
+  printf("fake_rsa_mod_exp() %d\n", counter);
     fake_pause_job();
+  if (counter == 2) {
+  printf("fake_rsa_mod_exp() %d BOOM\n", counter);
+    return 0;
+  }
+
     return RSA_meth_get_mod_exp(RSA_PKCS1_OpenSSL())(r0, I, rsa, ctx);
 }
 
