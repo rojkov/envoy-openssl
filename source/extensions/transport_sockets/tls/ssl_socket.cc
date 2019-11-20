@@ -213,10 +213,6 @@ PostIoAction SslSocket::doHandshake() {
         return PostIoAction::KeepOpen;
       }
 
-      if (state_ == SocketState::ShutdownSent) {
-        return PostIoAction::Close;
-      }
-
       state_ = SocketState::HandshakeInProgress;
 
       rc = SSL_get_all_async_fds(ssl_, NULL, &numfds);
