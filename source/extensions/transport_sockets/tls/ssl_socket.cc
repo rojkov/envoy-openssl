@@ -110,7 +110,6 @@ SslSocket::ReadResult SslSocket::sslReadIntoSlice(Buffer::RawSlice& slice) {
 }
 
 Network::IoResult SslSocket::doRead(Buffer::Instance& read_buffer) {
-  printf("SslSocket::doRead %ld\n", callbacks_->connection().id());
   if (state_ != SocketState::HandshakeComplete && state_ != SocketState::ShutdownSent) {
     PostIoAction action = doHandshake();
     if (action == PostIoAction::Close || state_ != SocketState::HandshakeComplete) {
@@ -143,7 +142,6 @@ Network::IoResult SslSocket::doRead(Buffer::Instance& read_buffer) {
         case SSL_ERROR_WANT_READ:
           break;
         case SSL_ERROR_ZERO_RETURN:
-        printf("SslSocket::doRead() end_stream\n");
           end_stream = true;
           break;
         case SSL_ERROR_WANT_WRITE:
@@ -188,7 +186,6 @@ void SslSocket::onPrivateKeyMethodComplete() {
 PostIoAction SslSocket::doHandshake() {
   ASSERT(state_ != SocketState::HandshakeComplete && state_ != SocketState::ShutdownSent);
   int rc = SSL_do_handshake(ssl_);
-  printf("after SSL_do_handshake() %ld\n", callbacks_->connection().id());
   if (rc == 1) {
     ENVOY_CONN_LOG(debug, "handshake complete", callbacks_->connection());
     state_ = SocketState::HandshakeComplete;
@@ -211,15 +208,12 @@ PostIoAction SslSocket::doHandshake() {
       return PostIoAction::KeepOpen;
     case SSL_ERROR_WANT_ASYNC:
       ENVOY_CONN_LOG(debug, "SSL handshake: request async handling", callbacks_->connection());
-      printf("want async %ld\n", callbacks_->connection().id());
 
       if (state_ == SocketState::HandshakeInProgress) {
-        printf("line 257 %ld\n", callbacks_->connection().id());
         return PostIoAction::KeepOpen;
       }
 
       if (state_ == SocketState::ShutdownSent) {
-        printf("line 222 in shutdown state %ld\n", callbacks_->connection().id());
         return PostIoAction::Close;
       }
 
@@ -228,7 +222,6 @@ PostIoAction SslSocket::doHandshake() {
       rc = SSL_get_all_async_fds(ssl_, NULL, &numfds);
       if (rc == 0) {
         drainErrorQueue();
-        printf("line 266 %ld\n", callbacks_->connection().id());
         return PostIoAction::Close;
       }
 
@@ -236,14 +229,12 @@ PostIoAction SslSocket::doHandshake() {
       if (numfds != 1) {
         ENVOY_LOG(error, "Only one async OpenSSL engine is supported currently");
         drainErrorQueue();
-        printf("line 274 %ld\n", callbacks_->connection().id());
         return PostIoAction::Close;
       }
 
       fds = static_cast<OSSL_ASYNC_FD*>(malloc(numfds * sizeof(OSSL_ASYNC_FD)));
       if (fds == NULL) {
         drainErrorQueue();
-        printf("line 281 %ld\n", callbacks_->connection().id());
         return PostIoAction::Close;
       }
 
@@ -251,7 +242,6 @@ PostIoAction SslSocket::doHandshake() {
       if (rc == 0) {
         free(fds);
         drainErrorQueue();
-        printf("line 289 %ld\n", callbacks_->connection().id());
         return PostIoAction::Close;
       }
 
@@ -260,13 +250,11 @@ PostIoAction SslSocket::doHandshake() {
           Event::FileTriggerType::Edge, Event::FileReadyType::Read);
       ENVOY_CONN_LOG(debug, "SSL async fd: {}, numfds: {}", callbacks_->connection(), fds[0],
                      numfds);
-      printf("SSL async %ld\n", callbacks_->connection().id());
       free(fds);
 
       return PostIoAction::KeepOpen;
     default:
       ENVOY_CONN_LOG(debug, "handshake error: {}", callbacks_->connection(), err);
-      printf("SSL handshake error %ld\n", callbacks_->connection().id());
       drainErrorQueue();
       return PostIoAction::Close;
     }
@@ -301,7 +289,6 @@ void SslSocket::drainErrorQueue() {
 }
 
 Network::IoResult SslSocket::doWrite(Buffer::Instance& write_buffer, bool end_stream) {
-  printf("SslSocket::doWrite %ld\n", callbacks_->connection().id());
   ASSERT(state_ != SocketState::ShutdownSent || write_buffer.length() == 0);
   if (state_ != SocketState::HandshakeComplete && state_ != SocketState::ShutdownSent) {
     PostIoAction action = doHandshake();
@@ -420,14 +407,12 @@ void SslSocket::shutdownSsl() {
 
 void SslSocket::asyncCb() {
   ENVOY_CONN_LOG(debug, "SSL async done!", callbacks_->connection());
-  printf("SslSocket::asyncCb() %ld\n", callbacks_->connection().id());
 
   ASSERT(state_ != SocketState::HandshakeComplete);
   // We lose the return value here, so might consider propagating it with an event
   // in case we run into "Close" result from the handshake handler.
   PostIoAction action = doHandshake();
   if (action == PostIoAction::Close) {
-    printf("SslSocket::asyncCb()  action = Close %ld\n", callbacks_->connection().id());
     ENVOY_CONN_LOG(debug, "async handshake completion error", callbacks_->connection());
     callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite);
   }
