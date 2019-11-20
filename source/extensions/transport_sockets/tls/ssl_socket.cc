@@ -69,52 +69,6 @@ struct THandle {
 };
 
 SslSocket::~SslSocket() {
-  // If we let the SSL socket be destroyed while there is a pending async SSL operation,
-  // it seems that the callback handler will use already freed memory.
-  if (SSL_waiting_for_async(ssl_)) {
-    OSSL_ASYNC_FD* fds;
-    size_t numfds;
-
-    THandle *th_ptr = new THandle;
-    th_ptr->info_ = info_;
-
-    int rc = SSL_get_all_async_fds(ssl_, NULL, &numfds);
-    if (rc == 0) {
-      printf("Oops1\n");
-      return;
-    }
-
-    if (numfds != 1) {
-      printf("Oops2\n");
-      return;
-    }
-
-    fds = static_cast<OSSL_ASYNC_FD*>(malloc(numfds * sizeof(OSSL_ASYNC_FD)));
-    if (fds == NULL) {
-      printf("Oops3\n");
-      return;
-    }
-
-    rc = SSL_get_all_async_fds(ssl_, fds, &numfds);
-    if (rc == 0) {
-      printf("Oops4\n");
-      free(fds);
-      return;
-    }
-
-    //th_ptr->old_file_event_ = std::move(file_event_);
-    auto ev = file_event_.release();
-    ev->setEnabled(0);
-    delete ev;
-    th_ptr->file_event_ = callbacks_->connection().dispatcher().createFileEvent(
-        fds[0], [th_ptr](uint32_t /* events */) -> void {
-          printf("Delete THandle\n");
-          delete th_ptr;
-        },
-        Event::FileTriggerType::Edge, Event::FileReadyType::Read);
-    free(fds);
-    printf("Postponed deleting SSL from %p\n", this);
-  }
 }
 
 void SslSocket::setTransportSocketCallbacks(Network::TransportSocketCallbacks& callbacks) {
@@ -156,7 +110,7 @@ SslSocket::ReadResult SslSocket::sslReadIntoSlice(Buffer::RawSlice& slice) {
 }
 
 Network::IoResult SslSocket::doRead(Buffer::Instance& read_buffer) {
-  printf("SslSocket::doRead\n");
+  printf("SslSocket::doRead %ld\n", callbacks_->connection().id());
   if (state_ != SocketState::HandshakeComplete && state_ != SocketState::ShutdownSent) {
     PostIoAction action = doHandshake();
     if (action == PostIoAction::Close || state_ != SocketState::HandshakeComplete) {
@@ -264,6 +218,11 @@ PostIoAction SslSocket::doHandshake() {
         return PostIoAction::KeepOpen;
       }
 
+      if (state_ == SocketState::ShutdownSent) {
+        printf("line 222 in shutdown state %ld\n", callbacks_->connection().id());
+        return PostIoAction::Close;
+      }
+
       state_ = SocketState::HandshakeInProgress;
 
       rc = SSL_get_all_async_fds(ssl_, NULL, &numfds);
@@ -342,6 +301,7 @@ void SslSocket::drainErrorQueue() {
 }
 
 Network::IoResult SslSocket::doWrite(Buffer::Instance& write_buffer, bool end_stream) {
+  printf("SslSocket::doWrite %ld\n", callbacks_->connection().id());
   ASSERT(state_ != SocketState::ShutdownSent || write_buffer.length() == 0);
   if (state_ != SocketState::HandshakeComplete && state_ != SocketState::ShutdownSent) {
     PostIoAction action = doHandshake();
@@ -410,6 +370,51 @@ void SslSocket::shutdownSsl() {
     ENVOY_CONN_LOG(debug, "SSL shutdown: rc={}", callbacks_->connection(), rc);
     drainErrorQueue();
     state_ = SocketState::ShutdownSent;
+  // If we let the SSL socket be destroyed while there is a pending async SSL operation,
+  // it seems that the callback handler will use already freed memory.
+  if (SSL_waiting_for_async(ssl_)) {
+    OSSL_ASYNC_FD* fds;
+    size_t numfds;
+
+    THandle *th_ptr = new THandle;
+    th_ptr->info_ = info_;
+
+    int rc = SSL_get_all_async_fds(ssl_, NULL, &numfds);
+    if (rc == 0) {
+      printf("Oops1\n");
+      return;
+    }
+
+    if (numfds != 1) {
+      printf("Oops2\n");
+      return;
+    }
+
+    fds = static_cast<OSSL_ASYNC_FD*>(malloc(numfds * sizeof(OSSL_ASYNC_FD)));
+    if (fds == NULL) {
+      printf("Oops3\n");
+      return;
+    }
+
+    rc = SSL_get_all_async_fds(ssl_, fds, &numfds);
+    if (rc == 0) {
+      printf("Oops4\n");
+      free(fds);
+      return;
+    }
+
+    //th_ptr->old_file_event_ = std::move(file_event_);
+    auto ev = file_event_.release();
+    delete ev;
+    th_ptr->file_event_ = callbacks_->connection().dispatcher().createFileEvent(
+        fds[0], [th_ptr](uint32_t /* events */) -> void {
+          printf("Delete THandle\n");
+          delete th_ptr;
+        },
+        Event::FileTriggerType::Edge, Event::FileReadyType::Read || Event::FileReadyType::Write || Event::FileReadyType::Closed);
+    free(fds);
+    printf("Postponed deleting SSL from %p\n", this);
+  }
   }
 }
 
