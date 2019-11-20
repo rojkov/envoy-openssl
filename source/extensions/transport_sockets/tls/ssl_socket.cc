@@ -102,7 +102,10 @@ SslSocket::~SslSocket() {
       return;
     }
 
-    th_ptr->old_file_event_ = std::move(file_event_);
+    //th_ptr->old_file_event_ = std::move(file_event_);
+    auto ev = file_event_.release();
+    ev->setEnabled(0);
+    delete ev;
     th_ptr->file_event_ = callbacks_->connection().dispatcher().createFileEvent(
         fds[0], [th_ptr](uint32_t /* events */) -> void {
           printf("Delete THandle\n");
@@ -110,7 +113,7 @@ SslSocket::~SslSocket() {
         },
         Event::FileTriggerType::Edge, Event::FileReadyType::Read);
     free(fds);
-    printf("Postponed deleting SSL\n");
+    printf("Postponed deleting SSL from %p\n", this);
   }
 }
 
@@ -153,6 +156,7 @@ SslSocket::ReadResult SslSocket::sslReadIntoSlice(Buffer::RawSlice& slice) {
 }
 
 Network::IoResult SslSocket::doRead(Buffer::Instance& read_buffer) {
+  printf("SslSocket::doRead\n");
   if (state_ != SocketState::HandshakeComplete && state_ != SocketState::ShutdownSent) {
     PostIoAction action = doHandshake();
     if (action == PostIoAction::Close || state_ != SocketState::HandshakeComplete) {
@@ -230,6 +234,7 @@ void SslSocket::onPrivateKeyMethodComplete() {
 PostIoAction SslSocket::doHandshake() {
   ASSERT(state_ != SocketState::HandshakeComplete && state_ != SocketState::ShutdownSent);
   int rc = SSL_do_handshake(ssl_);
+  printf("after SSL_do_handshake() %ld\n", callbacks_->connection().id());
   if (rc == 1) {
     ENVOY_CONN_LOG(debug, "handshake complete", callbacks_->connection());
     state_ = SocketState::HandshakeComplete;

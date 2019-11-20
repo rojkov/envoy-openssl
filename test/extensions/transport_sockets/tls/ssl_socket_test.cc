@@ -399,12 +399,18 @@ void testUtil(const TestUtilOptions& options) {
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { 
           close_second_time(); 
-          auto serv_con_ptr = server_connection.release();
-          serv_con_ptr->close(Network::ConnectionCloseType::NoFlush);
-          delete serv_con_ptr;
+          server_connection->readDisable(true);
+          server_connection->close(Network::ConnectionCloseType::NoFlush);
+          printf("closed server connection %p\n", server_connection.get());
+          //auto serv_con_ptr = server_connection.release();
+          //delete serv_con_ptr;
+          printf("deleted server connection 1\n");
     }));
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
-        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { /* close_second_time(); */}));
+        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { 
+          close_second_time();
+          printf("server connection is closing\n");
+          }));
   } else {
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::RemoteClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
@@ -4285,7 +4291,9 @@ static int fake_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
   static int counter = 0;
   counter++;
   printf("fake_rsa_mod_exp() %d\n", counter);
+  //if (counter != 3) {
     fake_pause_job();
+  //}
   if (counter == 2) {
   printf("fake_rsa_mod_exp() %d BOOM\n", counter);
     return 0;
