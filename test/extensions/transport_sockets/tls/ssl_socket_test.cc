@@ -470,6 +470,16 @@ void testUtil(const TestUtilOptions& options) {
           printf("deleted server connection 1\n");
           fake_pause_job(true);
           printf("after artificial fake_pause_job\n");
+          dispatcher->post([&]() -> void {
+            printf("*1\n");
+            dispatcher->post([&]() -> void {
+              printf("*2\n");
+              dispatcher->post([&]() -> void {
+                printf("*3\n");
+                //close_second_time();
+              });
+            });
+          });
     }));
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { 
@@ -483,7 +493,7 @@ void testUtil(const TestUtilOptions& options) {
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
   }
 
-  dispatcher->run(Event::Dispatcher::RunType::Block);
+  dispatcher->run(options.expectPrematureExit() ? Event::Dispatcher::RunType::NonBlock: Event::Dispatcher::RunType::Block);
 
   if (!options.expectedServerStats().empty()) {
     EXPECT_EQ(1UL, server_stats_store.counter(options.expectedServerStats()).value());
