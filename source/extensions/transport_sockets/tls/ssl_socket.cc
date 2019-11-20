@@ -185,6 +185,7 @@ Network::IoResult SslSocket::doRead(Buffer::Instance& read_buffer) {
         case SSL_ERROR_WANT_READ:
           break;
         case SSL_ERROR_ZERO_RETURN:
+        printf("SslSocket::doRead() end_stream\n");
           end_stream = true;
           break;
         case SSL_ERROR_WANT_WRITE:
