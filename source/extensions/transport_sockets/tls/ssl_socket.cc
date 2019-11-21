@@ -389,7 +389,7 @@ void SslSocket::shutdownSsl() {
             printf("Delete THandle\n");
             delete th_ptr;
           },
-          Event::FileTriggerType::Edge, Event::FileReadyType::Read || Event::FileReadyType::Write || Event::FileReadyType::Closed);
+          Event::FileTriggerType::Edge, Event::FileReadyType::Read);
       free(fds);
       printf("Postponed deleting SSL from %p\n", this);
     }
