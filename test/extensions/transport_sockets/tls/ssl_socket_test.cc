@@ -4270,25 +4270,23 @@ int fake_rsa_priv_dec(int flen, const unsigned char *from,
         (flen, from, to, rsa, padding);
 }
 
+bool failRsaModExp = false;
 int fake_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx) {
-    /* Ignore errors - we carry on anyway */
-  static int counter = 0;
-  counter++;
-  printf("fake_rsa_mod_exp() %d\n", counter);
-  //if (counter != 3) {
-    fake_pause_job();
-  //}
-  if (counter == 2) {
-  printf("fake_rsa_mod_exp() %d BOOM\n", counter);
+  printf("fake_rsa_mod_exp()\n");
+  fake_pause_job();
+
+  if (failRsaModExp) {
+    printf("fake_rsa_mod_exp() BOOM\n");
+    failRsaModExp = false;
     return 0;
   }
 
-    return RSA_meth_get_mod_exp(RSA_PKCS1_OpenSSL())(r0, I, rsa, ctx);
+  return RSA_meth_get_mod_exp(RSA_PKCS1_OpenSSL())(r0, I, rsa, ctx);
 }
 
 int fake_rsa_init(RSA *rsa) {
   printf("fake_rsa_init()\n");
-    return RSA_meth_get_init(RSA_PKCS1_OpenSSL())(rsa);
+  return RSA_meth_get_init(RSA_PKCS1_OpenSSL())(rsa);
 }
 
 int fake_rsa_finish(RSA *rsa) {
@@ -4379,6 +4377,7 @@ TEST_P(SslSocketTest, SyncSignSuccess2) {
   printf("Engine set to default RSA? %d\n", ret);
   TestUtilOptions successful_test_options(successful_client_ctx_yaml, server_ctx_yaml, false,
                                           GetParam());
+  failRsaModExp = true;
   testUtil(successful_test_options
     .setExpectedServerCloseEvent(Network::ConnectionEvent::LocalClose)
     .setExpectedServerStats(""));
