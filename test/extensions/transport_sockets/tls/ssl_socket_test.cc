@@ -132,7 +132,7 @@ public:
     return *this;
   }
 
-  bool expectPrematureExit() const { return expect_premature_exit_; }
+  bool expectPrematureDisconnect() const { return expect_premature_exit_; }
 
   TestUtilOptions& setExpectPrematureExit() {
     expect_premature_exit_ = true;
@@ -444,7 +444,7 @@ void testUtil(const TestUtilOptions& options) {
 
   size_t close_count = 0;
   auto close_second_time = [&close_count, &dispatcher, &options]() {
-    printf("dispatcher exit %d\n", options.expectPrematureExit());
+    printf("dispatcher exit %d\n", options.expectPrematureDisconnect());
     if (++close_count == 2) {
       dispatcher->exit();
     }
@@ -457,33 +457,21 @@ void testUtil(const TestUtilOptions& options) {
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { connect_second_time(); }));
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
-  } else if (options.expectPrematureExit()) {
+  } else if (options.expectPrematureDisconnect()) {
     printf("client connection %ld\n", client_connection->id());
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { 
-          close_second_time(); 
           server_connection->readDisable(true);
           server_connection->close(Network::ConnectionCloseType::NoFlush);
           printf("closed server connection %p\n", server_connection.get());
           //auto serv_con_ptr = server_connection.release();
           //delete serv_con_ptr;
           printf("deleted server connection 1\n");
-          fake_pause_job(true);
+          //fake_pause_job(true);
           printf("after artificial fake_pause_job\n");
-          dispatcher->post([&]() -> void {
-            printf("*1\n");
-            dispatcher->post([&]() -> void {
-              printf("*2\n");
-              dispatcher->post([&]() -> void {
-                printf("*3\n");
-                //close_second_time();
-              });
-            });
-          });
     }));
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { 
-          /* close_second_time(); */
           printf("server connection is closing\n");
           }));
   } else {
@@ -493,7 +481,7 @@ void testUtil(const TestUtilOptions& options) {
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
   }
 
-  dispatcher->run(options.expectPrematureExit() ? Event::Dispatcher::RunType::NonBlock: Event::Dispatcher::RunType::Block);
+  dispatcher->run(options.expectPrematureDisconnect() ? Event::Dispatcher::RunType::NonBlock: Event::Dispatcher::RunType::Block);
 
   if (!options.expectedServerStats().empty()) {
     EXPECT_EQ(1UL, server_stats_store.counter(options.expectedServerStats()).value());
