@@ -101,7 +101,7 @@ public:
                   bool expect_success, Network::Address::IpVersion version)
       : TestUtilOptionsBase(expect_success, version), client_ctx_yaml_(client_ctx_yaml),
         server_ctx_yaml_(server_ctx_yaml), expect_no_cert_(false), expect_no_cert_chain_(false),
-        expect_private_key_method_(false), expect_premature_exit_(false),
+        expect_private_key_method_(false), expect_premature_disconnect_(false),
         expected_server_close_event_(Network::ConnectionEvent::RemoteClose) {
     if (expect_success) {
       setExpectedServerStats("ssl.handshake");
@@ -132,10 +132,10 @@ public:
     return *this;
   }
 
-  bool expectPrematureDisconnect() const { return expect_premature_exit_; }
+  bool expectPrematureDisconnect() const { return expect_premature_disconnect_; }
 
   TestUtilOptions& setExpectPrematureExit() {
-    expect_premature_exit_ = true;
+    expect_premature_disconnect_ = true;
     return *this;
   }
 
@@ -232,7 +232,7 @@ private:
   bool expect_no_cert_;
   bool expect_no_cert_chain_;
   bool expect_private_key_method_;
-  bool expect_premature_exit_;
+  bool expect_premature_disconnect_;
   Network::ConnectionEvent expected_server_close_event_;
   std::string expected_digest_;
   std::vector<std::string> expected_local_uri_;
@@ -4176,7 +4176,7 @@ static void wait_cleanup(ASYNC_WAIT_CTX * /* ctx */, const void */* key */,
     OPENSSL_free(pwritefd);
 }
 
-static void fake_pause_job(bool fake = false) {
+static void fake_pause_job() {
   printf("fake_pause_job()\n");
     ASYNC_JOB *job;
     ASYNC_WAIT_CTX *waitctx;
@@ -4217,9 +4217,7 @@ static void fake_pause_job(bool fake = false) {
         return;
 
     /* Ignore errors - we carry on anyway */
-    if (!fake) {
     ASYNC_pause_job();
-    }
 
     /* Clear the wake signal */
     if (read(pipefds[0], &buf, 1) < 0)
