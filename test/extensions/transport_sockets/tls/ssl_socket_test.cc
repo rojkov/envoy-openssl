@@ -58,6 +58,8 @@ namespace TransportSockets {
 namespace Tls {
 namespace {
 
+// FIXME: Since OpenSSL engines don't have API for setting custom state
+//        use global variables inside our fake RSA methods.
 Envoy::Network::ClientConnection *client_connection_ptr = nullptr;
 
 /**
@@ -288,7 +290,7 @@ void testUtil(const TestUtilOptions& options) {
   Network::ClientConnectionPtr client_connection = dispatcher->createClientConnection(
       socket.localAddress(), Network::Address::InstanceConstSharedPtr(),
       client_ssl_socket_factory.createTransportSocket(nullptr), nullptr);
-      client_connection_ptr = client_connection.get();
+  client_connection_ptr = client_connection.get();
   Network::ConnectionPtr server_connection;
   Network::MockConnectionCallbacks server_connection_callbacks;
   EXPECT_CALL(callbacks, onAccept_(_))
@@ -380,7 +382,7 @@ void testUtil(const TestUtilOptions& options) {
   };
 
   size_t close_count = 0;
-  auto close_second_time = [&close_count, &dispatcher, &options]() {
+  auto close_second_time = [&close_count, &dispatcher]() {
     if (++close_count == 2) {
       dispatcher->exit();
     }
