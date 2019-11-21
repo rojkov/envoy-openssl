@@ -62,9 +62,6 @@ SslSocket::SslSocket(Envoy::Ssl::ContextSharedPtr ctx, InitialState state,
   SSL_set_mode(ssl_, SSL_MODE_ASYNC);
 }
 
-SslSocket::~SslSocket() {
-}
-
 void SslSocket::setTransportSocketCallbacks(Network::TransportSocketCallbacks& callbacks) {
   ASSERT(!callbacks_);
   callbacks_ = &callbacks;
