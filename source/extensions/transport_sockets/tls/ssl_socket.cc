@@ -62,7 +62,7 @@ SslSocket::SslSocket(Envoy::Ssl::ContextSharedPtr ctx, InitialState state,
   SSL_set_mode(ssl_, SSL_MODE_ASYNC);
 }
 
-struct SslHolder : public Envoy::Event::DeferredDeletable {
+struct SslHolder {
   Ssl::ConnectionInfoConstSharedPtr info_;
   Event::FileEventPtr file_event_;
 };
@@ -359,9 +359,6 @@ void SslSocket::shutdownSsl() {
       OSSL_ASYNC_FD* fds;
       size_t numfds;
 
-      SslHolder *holder = new SslHolder;
-      holder->info_ = info_;
-
       int rc = SSL_get_all_async_fds(ssl_, NULL, &numfds);
       if (rc == 0) {
         return;
@@ -383,17 +380,12 @@ void SslSocket::shutdownSsl() {
         return;
       }
 
-      Envoy::Event::Dispatcher& dispatcher = callbacks_->connection().dispatcher();
-
+      SslHolder *holder = new SslHolder;
+      holder->info_ = info_;
       holder->file_event_ = callbacks_->connection().dispatcher().createFileEvent(
-          fds[0], [holder, &dispatcher](uint32_t /* events */) -> void {
+          fds[0], [holder](uint32_t /* events */) -> void {
             printf("Delete THandle\n");
             delete holder;
-            //dispatcher.deferredDelete(holder);
-            dispatcher.post([&]() -> void {
-              printf("*3 TEST\n");
-              //close_second_time();
-            });
           },
           Event::FileTriggerType::Edge, Event::FileReadyType::Read);
       free(fds);
