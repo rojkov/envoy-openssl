@@ -62,11 +62,6 @@ SslSocket::SslSocket(Envoy::Ssl::ContextSharedPtr ctx, InitialState state,
   SSL_set_mode(ssl_, SSL_MODE_ASYNC);
 }
 
-struct SslHolder {
-  Ssl::ConnectionInfoConstSharedPtr info_;
-  Event::FileEventPtr file_event_;
-};
-
 SslSocket::~SslSocket() {
 }
 
@@ -343,6 +338,13 @@ Network::IoResult SslSocket::doWrite(Buffer::Instance& write_buffer, bool end_st
 void SslSocket::onConnected() { ASSERT(state_ == SocketState::PreHandshake); }
 
 Ssl::ConnectionInfoConstSharedPtr SslSocket::ssl() const { return info_; }
+
+// SslHolder defers SSL_free() calls by keeping a reference to SslSocketInfo until there's no
+// pending async job and it's safe to delete it.
+struct SslHolder {
+  Ssl::ConnectionInfoConstSharedPtr info_;
+  Event::FileEventPtr file_event_;
+};
 
 void SslSocket::shutdownSsl() {
   ASSERT(state_ != SocketState::PreHandshake);
