@@ -461,7 +461,6 @@ void testUtil(const TestUtilOptions& options) {
     printf("client connection %ld\n", client_connection->id());
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { 
-          server_connection->readDisable(true);
           server_connection->close(Network::ConnectionCloseType::NoFlush);
           printf("closed server connection %p\n", server_connection.get());
           //auto serv_con_ptr = server_connection.release();
