@@ -458,21 +458,11 @@ void testUtil(const TestUtilOptions& options) {
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
   } else if (options.expectPrematureDisconnect()) {
-    printf("client connection %ld\n", client_connection->id());
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { 
           server_connection->close(Network::ConnectionCloseType::NoFlush);
-          printf("closed server connection %p\n", server_connection.get());
-          //auto serv_con_ptr = server_connection.release();
-          //delete serv_con_ptr;
-          printf("deleted server connection 1\n");
-          //fake_pause_job(true);
-          printf("after artificial fake_pause_job\n");
     }));
-    EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
-        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { 
-          printf("server connection is closing\n");
-          }));
+    EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
   } else {
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::RemoteClose))
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
