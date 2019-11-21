@@ -4224,50 +4224,40 @@ void fake_pause_job() {
 }
 
 /*
- * RSA implementation
+ * Fake RSA implementation
  */
 
-int fake_pub_enc(int flen, const unsigned char *from,
-                    unsigned char *to, RSA *rsa, int padding) {
-    /* Ignore errors - we carry on anyway */
+int fake_pub_enc(int flen, const unsigned char *from, unsigned char *to, RSA *rsa, int padding) {
   printf("fake_pub_enc()\n");
-    fake_pause_job();
-    return RSA_meth_get_pub_enc(RSA_PKCS1_OpenSSL())
-        (flen, from, to, rsa, padding);
+  fake_pause_job();
+  return RSA_meth_get_pub_enc(RSA_PKCS1_OpenSSL()) (flen, from, to, rsa, padding);
 }
 
-int fake_pub_dec(int flen, const unsigned char *from,
-                    unsigned char *to, RSA *rsa, int padding) {
-    /* Ignore errors - we carry on anyway */
+int fake_pub_dec(int flen, const unsigned char *from, unsigned char *to, RSA *rsa, int padding) {
   printf("fake_pub_dec()\n");
-    fake_pause_job();
-    return RSA_meth_get_pub_dec(RSA_PKCS1_OpenSSL())
-        (flen, from, to, rsa, padding);
+  fake_pause_job();
+  return RSA_meth_get_pub_dec(RSA_PKCS1_OpenSSL()) (flen, from, to, rsa, padding);
 }
 
-int fake_rsa_priv_enc(int flen, const unsigned char *from,
-                      unsigned char *to, RSA *rsa, int padding) {
-    /* Ignore errors - we carry on anyway */
-  static int counter = 0;
-  counter++;
-  printf("fake_rsa_priv_enc() %d\n", counter);
-    fake_pause_job();
-  if (counter == 3) {
-    printf("fake_rsa_priv_enc() %d BOOM\n", counter);
+bool isPrematureDisconnect = false;
+int fake_rsa_priv_enc(int flen, const unsigned char *from, unsigned char *to, RSA *rsa,
+                      int padding) {
+  printf("fake_rsa_priv_enc()\n");
+  fake_pause_job();
+  if (isPrematureDisconnect) {
+    printf("fake_rsa_priv_enc() BOOM\n");
     // TODO: close client connection here
     client_con_ptr->close(Network::ConnectionCloseType::NoFlush);
+    isPrematureDisconnect = false;
   }
-    return RSA_meth_get_priv_enc(RSA_PKCS1_OpenSSL())
-        (flen, from, to, rsa, padding);
+  return RSA_meth_get_priv_enc(RSA_PKCS1_OpenSSL()) (flen, from, to, rsa, padding);
 }
 
-int fake_rsa_priv_dec(int flen, const unsigned char *from,
-                      unsigned char *to, RSA *rsa, int padding) {
-    /* Ignore errors - we carry on anyway */
+int fake_rsa_priv_dec(int flen, const unsigned char *from, unsigned char *to, RSA *rsa,
+                      int padding) {
   printf("fake_rsa_priv_dec()\n");
-    fake_pause_job();
-    return RSA_meth_get_priv_dec(RSA_PKCS1_OpenSSL())
-        (flen, from, to, rsa, padding);
+  fake_pause_job();
+  return RSA_meth_get_priv_dec(RSA_PKCS1_OpenSSL()) (flen, from, to, rsa, padding);
 }
 
 bool failRsaModExp = false;
@@ -4291,7 +4281,7 @@ int fake_rsa_init(RSA *rsa) {
 
 int fake_rsa_finish(RSA *rsa) {
   printf("fake_rsa_finish()\n");
-    return RSA_meth_get_finish(RSA_PKCS1_OpenSSL())(rsa);
+  return RSA_meth_get_finish(RSA_PKCS1_OpenSSL())(rsa);
 }
 
 RSA_METHOD *fakeRsaMethod = nullptr;
@@ -4413,6 +4403,7 @@ TEST_P(SslSocketTest, SyncSignSuccess3) {
   printf("Engine set to default RSA? %d\n", ret);
   TestUtilOptions successful_test_options(successful_client_ctx_yaml, server_ctx_yaml, false,
                                           GetParam());
+  isPrematureDisconnect = true;
   testUtil(successful_test_options
     .setExpectedServerCloseEvent(Network::ConnectionEvent::RemoteClose)
     .setExpectPrematureExit()
