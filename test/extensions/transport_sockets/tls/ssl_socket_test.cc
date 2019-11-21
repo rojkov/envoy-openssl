@@ -58,7 +58,7 @@ namespace TransportSockets {
 namespace Tls {
 namespace {
 
-Envoy::Network::ClientConnection *client_con_ptr = nullptr;
+Envoy::Network::ClientConnection *client_connection_ptr = nullptr;
 
 /**
  * A base class to hold the options for testUtil() and testUtilV2().
@@ -288,7 +288,7 @@ void testUtil(const TestUtilOptions& options) {
   Network::ClientConnectionPtr client_connection = dispatcher->createClientConnection(
       socket.localAddress(), Network::Address::InstanceConstSharedPtr(),
       client_ssl_socket_factory.createTransportSocket(nullptr), nullptr);
-      client_con_ptr = client_connection.get();
+      client_connection_ptr = client_connection.get();
   Network::ConnectionPtr server_connection;
   Network::MockConnectionCallbacks server_connection_callbacks;
   EXPECT_CALL(callbacks, onAccept_(_))
@@ -4167,7 +4167,7 @@ TEST_P(SslReadBufferLimitTest, SmallReadsIntoSameSlice) {
 const char *fake_engine_id = "feng";
 const char *fake_engine_name = "Fake engine";
 
-void wait_cleanup(ASYNC_WAIT_CTX * /* ctx */, const void */* key */,
+void waitCleanup(ASYNC_WAIT_CTX * /* ctx */, const void */* key */,
                          OSSL_ASYNC_FD readfd, void *pvwritefd) {
     OSSL_ASYNC_FD *pwritefd = static_cast<OSSL_ASYNC_FD *>(pvwritefd);
     close(readfd);
@@ -4175,8 +4175,7 @@ void wait_cleanup(ASYNC_WAIT_CTX * /* ctx */, const void */* key */,
     OPENSSL_free(pwritefd);
 }
 
-void fake_pause_job() {
-  printf("fake_pause_job()\n");
+void fakePauseJob() {
     ASYNC_JOB *job;
     ASYNC_WAIT_CTX *waitctx;
     OSSL_ASYNC_FD pipefds[2] = {0, 0};
@@ -4202,8 +4201,8 @@ void fake_pause_job() {
         *writefd = pipefds[1];
 
         if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, fake_engine_id, pipefds[0],
-                                        writefd, wait_cleanup)) {
-            wait_cleanup(waitctx, fake_engine_id, pipefds[0], writefd);
+                                        writefd, waitCleanup)) {
+            waitCleanup(waitctx, fake_engine_id, pipefds[0], writefd);
             return;
         }
     }
@@ -4227,46 +4226,38 @@ void fake_pause_job() {
  * Fake RSA implementation
  */
 
-int fake_pub_enc(int flen, const unsigned char *from, unsigned char *to, RSA *rsa, int padding) {
-  printf("fake_pub_enc()\n");
-  fake_pause_job();
+int fakePubEnc(int flen, const unsigned char *from, unsigned char *to, RSA *rsa, int padding) {
+  fakePauseJob();
   return RSA_meth_get_pub_enc(RSA_PKCS1_OpenSSL()) (flen, from, to, rsa, padding);
 }
 
-int fake_pub_dec(int flen, const unsigned char *from, unsigned char *to, RSA *rsa, int padding) {
-  printf("fake_pub_dec()\n");
-  fake_pause_job();
+int fakePubDec(int flen, const unsigned char *from, unsigned char *to, RSA *rsa, int padding) {
+  fakePauseJob();
   return RSA_meth_get_pub_dec(RSA_PKCS1_OpenSSL()) (flen, from, to, rsa, padding);
 }
 
 bool isPrematureDisconnect = false;
-int fake_rsa_priv_enc(int flen, const unsigned char *from, unsigned char *to, RSA *rsa,
+int fakeRsaPrivEnc(int flen, const unsigned char *from, unsigned char *to, RSA *rsa,
                       int padding) {
-  printf("fake_rsa_priv_enc()\n");
-  fake_pause_job();
+  fakePauseJob();
   if (isPrematureDisconnect) {
-    printf("fake_rsa_priv_enc() BOOM\n");
-    // TODO: close client connection here
-    client_con_ptr->close(Network::ConnectionCloseType::NoFlush);
+    client_connection_ptr->close(Network::ConnectionCloseType::NoFlush);
     isPrematureDisconnect = false;
   }
   return RSA_meth_get_priv_enc(RSA_PKCS1_OpenSSL()) (flen, from, to, rsa, padding);
 }
 
-int fake_rsa_priv_dec(int flen, const unsigned char *from, unsigned char *to, RSA *rsa,
+int fakeRsaPrivDec(int flen, const unsigned char *from, unsigned char *to, RSA *rsa,
                       int padding) {
-  printf("fake_rsa_priv_dec()\n");
-  fake_pause_job();
+  fakePauseJob();
   return RSA_meth_get_priv_dec(RSA_PKCS1_OpenSSL()) (flen, from, to, rsa, padding);
 }
 
 bool failRsaModExp = false;
-int fake_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx) {
-  printf("fake_rsa_mod_exp()\n");
-  fake_pause_job();
+int fakeRsaModExp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx) {
+  fakePauseJob();
 
   if (failRsaModExp) {
-    printf("fake_rsa_mod_exp() BOOM\n");
     failRsaModExp = false;
     return 0;
   }
@@ -4274,13 +4265,11 @@ int fake_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx) {
   return RSA_meth_get_mod_exp(RSA_PKCS1_OpenSSL())(r0, I, rsa, ctx);
 }
 
-int fake_rsa_init(RSA *rsa) {
-  printf("fake_rsa_init()\n");
+int fakeRsaInit(RSA *rsa) {
   return RSA_meth_get_init(RSA_PKCS1_OpenSSL())(rsa);
 }
 
-int fake_rsa_finish(RSA *rsa) {
-  printf("fake_rsa_finish()\n");
+int fakeRsaFinish(RSA *rsa) {
   return RSA_meth_get_finish(RSA_PKCS1_OpenSSL())(rsa);
 }
 
@@ -4292,14 +4281,14 @@ ENGINE *newFakeAsyncEngine() {
     return nullptr;
   }
   if ((fakeRsaMethod = RSA_meth_new("Fake Async RSA method", 0)) == nullptr
-      || RSA_meth_set_pub_enc(fakeRsaMethod, fake_pub_enc) == 0
-      || RSA_meth_set_pub_dec(fakeRsaMethod, fake_pub_dec) == 0
-      || RSA_meth_set_priv_enc(fakeRsaMethod, fake_rsa_priv_enc) == 0
-      || RSA_meth_set_priv_dec(fakeRsaMethod, fake_rsa_priv_dec) == 0
-      || RSA_meth_set_mod_exp(fakeRsaMethod, fake_rsa_mod_exp) == 0
+      || RSA_meth_set_pub_enc(fakeRsaMethod, fakePubEnc) == 0
+      || RSA_meth_set_pub_dec(fakeRsaMethod, fakePubDec) == 0
+      || RSA_meth_set_priv_enc(fakeRsaMethod, fakeRsaPrivEnc) == 0
+      || RSA_meth_set_priv_dec(fakeRsaMethod, fakeRsaPrivDec) == 0
+      || RSA_meth_set_mod_exp(fakeRsaMethod, fakeRsaModExp) == 0
       || RSA_meth_set_bn_mod_exp(fakeRsaMethod, BN_mod_exp_mont) == 0
-      || RSA_meth_set_init(fakeRsaMethod, fake_rsa_init) == 0
-      || RSA_meth_set_finish(fakeRsaMethod, fake_rsa_finish) == 0
+      || RSA_meth_set_init(fakeRsaMethod, fakeRsaInit) == 0
+      || RSA_meth_set_finish(fakeRsaMethod, fakeRsaFinish) == 0
       || !ENGINE_set_id(e, fake_engine_id)
       || !ENGINE_set_name(e, fake_engine_name)
       || !ENGINE_set_RSA(e, fakeRsaMethod)) {
