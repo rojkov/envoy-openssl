@@ -4308,43 +4308,19 @@ static ENGINE *newFakeAsyncEngine() {
   if (e == nullptr) {
     return nullptr;
   }
-  printf("NEW ENGINE CREATED\n");
-  fakeRsaMethod = RSA_meth_new("Fake Async RSA method", 0);
-  if (fakeRsaMethod == nullptr) {
-    printf("failed to make fake rsa method\n");
-  }
-  if (RSA_meth_set_pub_enc(fakeRsaMethod, fake_pub_enc) == 0) {
-    printf("failed setting pub enc\n");
-  }
-  if (RSA_meth_set_pub_dec(fakeRsaMethod, fake_pub_dec) == 0) {
-    printf("failed setting pub dec\n");
-  }
-  if (RSA_meth_set_priv_enc(fakeRsaMethod, fake_rsa_priv_enc) == 0) {
-    printf("failed setting rsa priv enc\n");
-  }
-  if (RSA_meth_set_priv_dec(fakeRsaMethod, fake_rsa_priv_dec) == 0) {
-    printf("failed setting rsa priv dec\n");
-  }
-  if (RSA_meth_set_mod_exp(fakeRsaMethod, fake_rsa_mod_exp) == 0) {
-    printf("failed setting rsa mod exp\n");
-  }
-  if (RSA_meth_set_bn_mod_exp(fakeRsaMethod, BN_mod_exp_mont) == 0) {
-    printf("failed setting bn mod exp\n");
-  }
-  if (RSA_meth_set_init(fakeRsaMethod, fake_rsa_init) == 0) {
-    printf("failed setting set init\n");
-  }
-  if (RSA_meth_set_finish(fakeRsaMethod, fake_rsa_finish) == 0) {
-    printf("failed setting set finish\n");
-  }
-  if (!ENGINE_set_id(e, fake_engine_id)) {
-    printf("failed setting engine id\n");
-  }
-  if (!ENGINE_set_name(e, fake_engine_name)) {
-    printf("failed setting engine name\n");
-  }
-  if (!ENGINE_set_RSA(e, fakeRsaMethod)) {
-    printf("failed setting engine name\n");
+  if ((fakeRsaMethod = RSA_meth_new("Fake Async RSA method", 0)) == nullptr
+      || RSA_meth_set_pub_enc(fakeRsaMethod, fake_pub_enc) == 0
+      || RSA_meth_set_pub_dec(fakeRsaMethod, fake_pub_dec) == 0
+      || RSA_meth_set_priv_enc(fakeRsaMethod, fake_rsa_priv_enc) == 0
+      || RSA_meth_set_priv_dec(fakeRsaMethod, fake_rsa_priv_dec) == 0
+      || RSA_meth_set_mod_exp(fakeRsaMethod, fake_rsa_mod_exp) == 0
+      || RSA_meth_set_bn_mod_exp(fakeRsaMethod, BN_mod_exp_mont) == 0
+      || RSA_meth_set_init(fakeRsaMethod, fake_rsa_init) == 0
+      || RSA_meth_set_finish(fakeRsaMethod, fake_rsa_finish) == 0
+      || !ENGINE_set_id(e, fake_engine_id)
+      || !ENGINE_set_name(e, fake_engine_name)
+      || !ENGINE_set_RSA(e, fakeRsaMethod)) {
+    printf("failed to create fake RSA method\n");
   }
   return e;
 }
