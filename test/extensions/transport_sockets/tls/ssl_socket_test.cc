@@ -4316,22 +4316,18 @@ TEST_P(SslSocketTest, AsyncRSASuccess) {
   common_tls_context:
 )EOF";
   ENGINE* engine = newFakeAsyncEngine();
-  printf("Engine: %p\n", engine);
-  int ret = ENGINE_init(engine);
-  printf("Engine initialized? %d\n", ret);
-  ret = ENGINE_set_default_RSA(engine);
-  printf("Engine set to default RSA? %d\n", ret);
+  ASSERT_FALSE(engine == NULL);
+  ASSERT_TRUE(ENGINE_init(engine));
+  ASSERT_TRUE(ENGINE_set_default_RSA(engine));
   TestUtilOptions successful_test_options(successful_client_ctx_yaml, server_ctx_yaml, true,
                                           GetParam());
   testUtil(successful_test_options);
   ENGINE_unregister_RSA(engine);
-  ret = ENGINE_finish(engine);
-  printf("Engine fnished? %d\n", ret);
-  ret = ENGINE_free(engine);
-  printf("Engine freed? %d\n", ret);
+  ASSERT_TRUE(ENGINE_finish(engine));
+  ASSERT_TRUE(ENGINE_free(engine));
 }
 
-TEST_P(SslSocketTest, SyncSignSuccess2) {
+TEST_P(SslSocketTest, AsyncIncompleteHandshake) {
   const std::string server_ctx_yaml = R"EOF(
   common_tls_context:
     tls_certificates:
@@ -4349,11 +4345,9 @@ TEST_P(SslSocketTest, SyncSignSuccess2) {
   common_tls_context:
 )EOF";
   ENGINE* engine = newFakeAsyncEngine();
-  printf("Engine: %p\n", engine);
-  int ret = ENGINE_init(engine);
-  printf("Engine initialized? %d\n", ret);
-  ret = ENGINE_set_default_RSA(engine);
-  printf("Engine set to default RSA? %d\n", ret);
+  ASSERT_FALSE(engine == NULL);
+  ASSERT_TRUE(ENGINE_init(engine));
+  ASSERT_TRUE(ENGINE_set_default_RSA(engine));
   TestUtilOptions successful_test_options(successful_client_ctx_yaml, server_ctx_yaml, false,
                                           GetParam());
   failRsaModExp = true;
@@ -4361,10 +4355,8 @@ TEST_P(SslSocketTest, SyncSignSuccess2) {
     .setExpectedServerCloseEvent(Network::ConnectionEvent::LocalClose)
     .setExpectedServerStats(""));
   ENGINE_unregister_RSA(engine);
-  ret = ENGINE_finish(engine);
-  printf("Engine fnished? %d\n", ret);
-  ret = ENGINE_free(engine);
-  printf("Engine freed? %d\n", ret);
+  ASSERT_TRUE(ENGINE_finish(engine));
+  ASSERT_TRUE(ENGINE_free(engine));
 }
 
 TEST_P(SslSocketTest, SyncSignSuccess3) {
