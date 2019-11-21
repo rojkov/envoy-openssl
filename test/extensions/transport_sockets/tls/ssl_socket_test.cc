@@ -4164,19 +4164,18 @@ TEST_P(SslReadBufferLimitTest, SmallReadsIntoSameSlice) {
 }
 
 // The fake engine implementaion below is a partial copy of OpenSSL's dasync engine.
-static const char *fake_engine_id = "feng";
-static const char *fake_engine_name = "Fake engine";
+const char *fake_engine_id = "feng";
+const char *fake_engine_name = "Fake engine";
 
-static void wait_cleanup(ASYNC_WAIT_CTX * /* ctx */, const void */* key */,
-                         OSSL_ASYNC_FD readfd, void *pvwritefd)
-{
+void wait_cleanup(ASYNC_WAIT_CTX * /* ctx */, const void */* key */,
+                         OSSL_ASYNC_FD readfd, void *pvwritefd) {
     OSSL_ASYNC_FD *pwritefd = static_cast<OSSL_ASYNC_FD *>(pvwritefd);
     close(readfd);
     close(*pwritefd);
     OPENSSL_free(pwritefd);
 }
 
-static void fake_pause_job() {
+void fake_pause_job() {
   printf("fake_pause_job()\n");
     ASYNC_JOB *job;
     ASYNC_WAIT_CTX *waitctx;
@@ -4228,7 +4227,7 @@ static void fake_pause_job() {
  * RSA implementation
  */
 
-static int fake_pub_enc(int flen, const unsigned char *from,
+int fake_pub_enc(int flen, const unsigned char *from,
                     unsigned char *to, RSA *rsa, int padding) {
     /* Ignore errors - we carry on anyway */
   printf("fake_pub_enc()\n");
@@ -4237,7 +4236,7 @@ static int fake_pub_enc(int flen, const unsigned char *from,
         (flen, from, to, rsa, padding);
 }
 
-static int fake_pub_dec(int flen, const unsigned char *from,
+int fake_pub_dec(int flen, const unsigned char *from,
                     unsigned char *to, RSA *rsa, int padding) {
     /* Ignore errors - we carry on anyway */
   printf("fake_pub_dec()\n");
@@ -4246,9 +4245,8 @@ static int fake_pub_dec(int flen, const unsigned char *from,
         (flen, from, to, rsa, padding);
 }
 
-static int fake_rsa_priv_enc(int flen, const unsigned char *from,
-                      unsigned char *to, RSA *rsa, int padding)
-{
+int fake_rsa_priv_enc(int flen, const unsigned char *from,
+                      unsigned char *to, RSA *rsa, int padding) {
     /* Ignore errors - we carry on anyway */
   static int counter = 0;
   counter++;
@@ -4263,9 +4261,8 @@ static int fake_rsa_priv_enc(int flen, const unsigned char *from,
         (flen, from, to, rsa, padding);
 }
 
-static int fake_rsa_priv_dec(int flen, const unsigned char *from,
-                      unsigned char *to, RSA *rsa, int padding)
-{
+int fake_rsa_priv_dec(int flen, const unsigned char *from,
+                      unsigned char *to, RSA *rsa, int padding) {
     /* Ignore errors - we carry on anyway */
   printf("fake_rsa_priv_dec()\n");
     fake_pause_job();
@@ -4273,8 +4270,7 @@ static int fake_rsa_priv_dec(int flen, const unsigned char *from,
         (flen, from, to, rsa, padding);
 }
 
-static int fake_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
-{
+int fake_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx) {
     /* Ignore errors - we carry on anyway */
   static int counter = 0;
   counter++;
@@ -4290,20 +4286,19 @@ static int fake_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
     return RSA_meth_get_mod_exp(RSA_PKCS1_OpenSSL())(r0, I, rsa, ctx);
 }
 
-static int fake_rsa_init(RSA *rsa)
-{
+int fake_rsa_init(RSA *rsa) {
   printf("fake_rsa_init()\n");
     return RSA_meth_get_init(RSA_PKCS1_OpenSSL())(rsa);
 }
-static int fake_rsa_finish(RSA *rsa)
-{
+
+int fake_rsa_finish(RSA *rsa) {
   printf("fake_rsa_finish()\n");
     return RSA_meth_get_finish(RSA_PKCS1_OpenSSL())(rsa);
 }
 
-static RSA_METHOD *fakeRsaMethod = nullptr;
+RSA_METHOD *fakeRsaMethod = nullptr;
 
-static ENGINE *newFakeAsyncEngine() {
+ENGINE *newFakeAsyncEngine() {
   ENGINE *e = ENGINE_new();
   if (e == nullptr) {
     return nullptr;
