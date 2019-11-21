@@ -408,7 +408,8 @@ void testUtil(const TestUtilOptions& options) {
         .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { close_second_time(); }));
   }
 
-  dispatcher->run(options.expectPrematureDisconnect() ? Event::Dispatcher::RunType::NonBlock: Event::Dispatcher::RunType::Block);
+  dispatcher->run(options.expectPrematureDisconnect() ? Event::Dispatcher::RunType::NonBlock
+                                                      : Event::Dispatcher::RunType::Block);
 
   if (!options.expectedServerStats().empty()) {
     EXPECT_EQ(1UL, server_stats_store.counter(options.expectedServerStats()).value());
@@ -4165,7 +4166,11 @@ TEST_P(SslReadBufferLimitTest, SmallReadsIntoSameSlice) {
   dispatcher_->run(Event::Dispatcher::RunType::Block);
 }
 
-// The fake engine implementaion below is a partial copy of OpenSSL's dasync engine.
+/*
+ * Fake engine implementaion.
+ * This is a partial copy of OpenSSL's dasync engine.
+ */
+
 const char *fake_engine_id = "feng";
 const char *fake_engine_name = "Fake engine";
 
