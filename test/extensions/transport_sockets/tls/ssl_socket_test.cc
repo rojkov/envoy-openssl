@@ -395,7 +395,7 @@ void testUtil(const TestUtilOptions& options) {
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
   } else if (options.expectPrematureDisconnect()) {
     EXPECT_CALL(client_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose))
-        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void { 
+        .WillOnce(Invoke([&](Network::ConnectionEvent) -> void {
           server_connection->close(Network::ConnectionCloseType::NoFlush);
     }));
     EXPECT_CALL(server_connection_callbacks, onEvent(Network::ConnectionEvent::LocalClose));
@@ -4163,7 +4163,7 @@ TEST_P(SslReadBufferLimitTest, SmallReadsIntoSameSlice) {
   dispatcher_->run(Event::Dispatcher::RunType::Block);
 }
 
-static RSA_METHOD *fakeRsaMethod = nullptr;
+// The fake engine implementaion below is a partial copy of OpenSSL's dasync engine.
 static const char *fake_engine_id = "feng";
 static const char *fake_engine_name = "Fake engine";
 
@@ -4209,7 +4209,7 @@ static void fake_pause_job() {
         }
     }
     /*
-     * In the Dummy async engine we are cheating. We signal that the job
+     * In this fake async engine we are cheating. We signal that the job
      * is complete by waking it before the call to ASYNC_pause_job(). A real
      * async engine would only wake when the job was actually complete
      */
@@ -4300,6 +4300,8 @@ static int fake_rsa_finish(RSA *rsa)
   printf("fake_rsa_finish()\n");
     return RSA_meth_get_finish(RSA_PKCS1_OpenSSL())(rsa);
 }
+
+static RSA_METHOD *fakeRsaMethod = nullptr;
 
 static ENGINE *newFakeAsyncEngine() {
   ENGINE *e = ENGINE_new();
