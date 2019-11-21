@@ -355,8 +355,8 @@ void SslSocket::shutdownSsl() {
     drainErrorQueue();
     state_ = SocketState::ShutdownSent;
 
-    // If we let the SSL socket be destroyed while there is a pending async SSL operation,
-    // it seems that the callback handler will use already freed memory.
+    // If we let the SSL socket be destroyed while there is a pending async SSL operation
+    // then the callback handler will use already freed memory. Hence defer its deleting.
     if (SSL_waiting_for_async(ssl_)) {
       OSSL_ASYNC_FD* fds;
       size_t numfds;
@@ -392,6 +392,7 @@ void SslSocket::shutdownSsl() {
           Event::FileTriggerType::Edge, Event::FileReadyType::Read);
       free(fds);
       printf("Postponed deleting SSL from %p\n", this);
+      ENVOY_CONN_LOG(info, "Postponed deleting SSL", callbacks_->connection());
     }
   }
 }
