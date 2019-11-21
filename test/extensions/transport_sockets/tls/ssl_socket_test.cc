@@ -246,69 +246,6 @@ private:
   std::string expected_expiration_peer_cert_;
 };
 
-static const char *fake_engine_id = "feng";
-static const char *fake_engine_name = "Fake engine";
-
-static void wait_cleanup(ASYNC_WAIT_CTX * /* ctx */, const void */* key */,
-                         OSSL_ASYNC_FD readfd, void *pvwritefd)
-{
-    OSSL_ASYNC_FD *pwritefd = static_cast<OSSL_ASYNC_FD *>(pvwritefd);
-    close(readfd);
-    close(*pwritefd);
-    OPENSSL_free(pwritefd);
-}
-
-static void fake_pause_job(bool fake = false) {
-  printf("fake_pause_job()\n");
-    ASYNC_JOB *job;
-    ASYNC_WAIT_CTX *waitctx;
-    OSSL_ASYNC_FD pipefds[2] = {0, 0};
-    OSSL_ASYNC_FD *writefd;
-    char buf = 'X';
-
-    if ((job = ASYNC_get_current_job()) == NULL)
-        return;
-
-    waitctx = ASYNC_get_wait_ctx(job);
-
-    if (ASYNC_WAIT_CTX_get_fd(waitctx, fake_engine_id, &pipefds[0],
-                              (void **)&writefd)) {
-        pipefds[1] = *writefd;
-    } else {
-        writefd = static_cast<OSSL_ASYNC_FD *>(OPENSSL_malloc(sizeof(*writefd)));
-        if (writefd == NULL)
-            return;
-        if (pipe(pipefds) != 0) {
-            OPENSSL_free(writefd);
-            return;
-        }
-        *writefd = pipefds[1];
-
-        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, fake_engine_id, pipefds[0],
-                                        writefd, wait_cleanup)) {
-            wait_cleanup(waitctx, fake_engine_id, pipefds[0], writefd);
-            return;
-        }
-    }
-    /*
-     * In the Dummy async engine we are cheating. We signal that the job
-     * is complete by waking it before the call to ASYNC_pause_job(). A real
-     * async engine would only wake when the job was actually complete
-     */
-    if (write(pipefds[1], &buf, 1) < 0)
-        return;
-
-    /* Ignore errors - we carry on anyway */
-    if (!fake) {
-    ASYNC_pause_job();
-    }
-
-    /* Clear the wake signal */
-    if (read(pipefds[0], &buf, 1) < 0)
-        return;
-}
-
-
 void testUtil(const TestUtilOptions& options) {
   Event::SimulatedTimeSystem time_system;
 
@@ -444,7 +381,6 @@ void testUtil(const TestUtilOptions& options) {
 
   size_t close_count = 0;
   auto close_second_time = [&close_count, &dispatcher, &options]() {
-    printf("dispatcher exit %d\n", options.expectPrematureDisconnect());
     if (++close_count == 2) {
       dispatcher->exit();
     }
@@ -4228,6 +4164,68 @@ TEST_P(SslReadBufferLimitTest, SmallReadsIntoSameSlice) {
 }
 
 static RSA_METHOD *fakeRsaMethod = nullptr;
+static const char *fake_engine_id = "feng";
+static const char *fake_engine_name = "Fake engine";
+
+static void wait_cleanup(ASYNC_WAIT_CTX * /* ctx */, const void */* key */,
+                         OSSL_ASYNC_FD readfd, void *pvwritefd)
+{
+    OSSL_ASYNC_FD *pwritefd = static_cast<OSSL_ASYNC_FD *>(pvwritefd);
+    close(readfd);
+    close(*pwritefd);
+    OPENSSL_free(pwritefd);
+}
+
+static void fake_pause_job(bool fake = false) {
+  printf("fake_pause_job()\n");
+    ASYNC_JOB *job;
+    ASYNC_WAIT_CTX *waitctx;
+    OSSL_ASYNC_FD pipefds[2] = {0, 0};
+    OSSL_ASYNC_FD *writefd;
+    char buf = 'X';
+
+    if ((job = ASYNC_get_current_job()) == NULL)
+        return;
+
+    waitctx = ASYNC_get_wait_ctx(job);
+
+    if (ASYNC_WAIT_CTX_get_fd(waitctx, fake_engine_id, &pipefds[0],
+                              (void **)&writefd)) {
+        pipefds[1] = *writefd;
+    } else {
+        writefd = static_cast<OSSL_ASYNC_FD *>(OPENSSL_malloc(sizeof(*writefd)));
+        if (writefd == NULL)
+            return;
+        if (pipe(pipefds) != 0) {
+            OPENSSL_free(writefd);
+            return;
+        }
+        *writefd = pipefds[1];
+
+        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, fake_engine_id, pipefds[0],
+                                        writefd, wait_cleanup)) {
+            wait_cleanup(waitctx, fake_engine_id, pipefds[0], writefd);
+            return;
+        }
+    }
+    /*
+     * In the Dummy async engine we are cheating. We signal that the job
+     * is complete by waking it before the call to ASYNC_pause_job(). A real
+     * async engine would only wake when the job was actually complete
+     */
+    if (write(pipefds[1], &buf, 1) < 0)
+        return;
+
+    /* Ignore errors - we carry on anyway */
+    if (!fake) {
+    ASYNC_pause_job();
+    }
+
+    /* Clear the wake signal */
+    if (read(pipefds[0], &buf, 1) < 0)
+        return;
+}
+
 /*
  * RSA implementation
  */
