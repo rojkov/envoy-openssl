@@ -134,7 +134,7 @@ public:
 
   bool expectPrematureDisconnect() const { return expect_premature_disconnect_; }
 
-  TestUtilOptions& setExpectPrematureExit() {
+  TestUtilOptions& setExpectPrematureDisconnect() {
     expect_premature_disconnect_ = true;
     return *this;
   }
@@ -4359,7 +4359,7 @@ TEST_P(SslSocketTest, AsyncIncompleteHandshake) {
   ASSERT_TRUE(ENGINE_free(engine));
 }
 
-TEST_P(SslSocketTest, SyncSignSuccess3) {
+TEST_P(SslSocketTest, AsyncPrematureDisconnect) {
   const std::string server_ctx_yaml = R"EOF(
   common_tls_context:
     tls_certificates:
@@ -4384,8 +4384,7 @@ TEST_P(SslSocketTest, SyncSignSuccess3) {
                                           GetParam());
   isPrematureDisconnect = true;
   testUtil(successful_test_options
-    .setExpectedServerCloseEvent(Network::ConnectionEvent::RemoteClose)
-    .setExpectPrematureExit()
+    .setExpectPrematureDisconnect()
     .setExpectedServerStats(""));
   ENGINE_unregister_RSA(engine);
   ASSERT_TRUE(ENGINE_finish(engine));
